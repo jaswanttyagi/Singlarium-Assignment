@@ -26,11 +26,10 @@ class MetricService:
 
     def get_metrics(self):
         return {
-            "total_llm_calls": self.total_llm_calls,
-            "llm_errors": self.llm_errors,
-            "concurrent_llm_calls": self.concurrent_llm_calls,
-            "max_concurrent_llm_calls": self.max_concurrent_llm_calls
-        }
+        "llm_calls_total": self.total_llm_calls,
+        "llm_errors_total": self.llm_errors,
+        "max_concurrent_llm_calls": self.max_concurrent_llm_calls
+    }
 
 
 # Create one shared metrics object for the whole application

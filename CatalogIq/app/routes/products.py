@@ -6,28 +6,23 @@ from app.services.product_service import product_service
 router = APIRouter()
 
 
-# Get Products
-
 @router.get("/api/products")
 def get_products(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=100),
     category: str | None = None,
-    search: str | None = None
+    q: str | None = None
 ):
     return product_service.get_products(
         page=page,
-        limit=limit,
+        page_size=page_size,
         category=category,
-        search=search
+        q=q
     )
 
 
-# Get Single Product
-
 @router.get("/api/products/{sku}")
 def get_product(sku: str):
-
     product = product_service.get_product(sku)
 
     if not product:
@@ -39,18 +34,16 @@ def get_product(sku: str):
     return product
 
 
-# Update Product
-
 @router.patch("/api/products/{sku}")
-def update_product(
-    sku: str,
-    data: dict
-):
+def update_product(sku: str, data: dict):
+    try:
+        product = product_service.update_product(sku, data)
 
-    product = product_service.update_product(
-        sku,
-        data
-    )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=str(error)
+        )
 
     if not product:
         raise HTTPException(

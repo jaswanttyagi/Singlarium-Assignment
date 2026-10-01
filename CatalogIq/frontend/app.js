@@ -98,51 +98,56 @@ async function checkHealth() {
 
 // CSV Upload
 
+// ============================================
+// CSV Upload
+// ============================================
+
 async function uploadCSV() {
 
     const file = csvFileInput.files[0];
 
     if (!file) {
-
-        uploadMessage.textContent =
-            "Please select a CSV file.";
-
+        uploadMessage.textContent = "Please select a CSV file.";
         return;
     }
 
     if (!file.name.toLowerCase().endsWith(".csv")) {
-
-        uploadMessage.textContent =
-            "Only CSV files are allowed.";
-
+        uploadMessage.textContent = "Only CSV files are allowed.";
         return;
     }
 
-    const formData = new FormData();
-
-    formData.append("file", file);
-
     uploadButton.disabled = true;
-
-    uploadMessage.textContent =
-        "Uploading CSV...";
+    uploadMessage.textContent = "Reading CSV...";
 
     try {
 
-        const response = await fetch(
-            "/api/jobs/csv",
-            {
-                method: "POST",
-                body: formData
-            }
-        );
+        const text = await file.text();
+
+        const products = parseCSV(text);
+
+        if (products.length === 0) {
+            throw new Error("CSV contains no products.");
+        }
+
+        uploadMessage.textContent =
+            `Parsed ${products.length} products. Creating job...`;
+
+        // Send parsed JSON products to the normal job API
+        const response = await fetch("/api/jobs", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                products: products
+            })
+        });
 
         const data = await response.json();
 
         if (!response.ok) {
-
             throw new Error(
-                data.detail || "CSV upload failed"
+                data.error || "CSV upload failed"
             );
         }
 
@@ -151,22 +156,17 @@ async function uploadCSV() {
         uploadMessage.textContent =
             "CSV uploaded successfully.";
 
-        // Show job section
         jobSection.hidden = false;
 
-        // Display initial job information
         updateJobUI(data);
 
-        // Start polling
         startJobPolling();
 
-        // Refresh products
         loadProducts();
 
     } catch (error) {
 
-        uploadMessage.textContent =
-            error.message;
+        uploadMessage.textContent = error.message;
 
         console.error(
             "CSV upload error:",
@@ -177,6 +177,113 @@ async function uploadCSV() {
 
         uploadButton.disabled = false;
     }
+}
+
+function parseCSV(text) {
+
+    const rows = [];
+    let row = [];
+    let value = "";
+    let insideQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+
+        const char = text[i];
+        const nextChar = text[i + 1];
+
+        if (char === '"' && insideQuotes && nextChar === '"') {
+            value += '"';
+            i++;
+            continue;
+        }
+
+        if (char === '"') {
+            insideQuotes = !insideQuotes;
+            continue;
+        }
+
+        if (char === "," && !insideQuotes) {
+            row.push(value.trim());
+            value = "";
+            continue;
+        }
+
+        if ((char === "\n" || char === "\r") && !insideQuotes) {
+
+            if (char === "\r" && nextChar === "\n") {
+                i++;
+            }
+
+            row.push(value.trim());
+            value = "";
+
+            if (row.some(cell => cell !== "")) {
+                rows.push(row);
+            }
+
+            row = [];
+            continue;
+        }
+
+        value += char;
+    }
+
+    if (value !== "" || row.length > 0) {
+        row.push(value.trim());
+        rows.push(row);
+    }
+
+    if (rows.length < 2) {
+        return [];
+    }
+
+    const headers = rows[0].map(
+        header => header.trim().toLowerCase()
+    );
+
+    const requiredColumns = [
+        "sku",
+        "raw_title"
+    ];
+
+    for (const column of requiredColumns) {
+
+        if (!headers.includes(column)) {
+            throw new Error(
+                `CSV must contain ${column} column`
+            );
+        }
+    }
+
+    return rows.slice(1).map((row, index) => {
+
+        const product = {};
+
+        headers.forEach((header, columnIndex) => {
+            product[header] = row[columnIndex] || "";
+        });
+
+        if (!product.sku.trim()) {
+            throw new Error(
+                `SKU is missing at CSV row ${index + 2}`
+            );
+        }
+
+        if (!product.raw_title.trim()) {
+            throw new Error(
+                `raw_title is missing at CSV row ${index + 2}`
+            );
+        }
+
+        return {
+            sku: product.sku.trim(),
+            raw_title: product.raw_title.trim(),
+            raw_description:
+                product.raw_description
+                    ? product.raw_description.trim()
+                    : ""
+        };
+    });
 }
 
 
@@ -318,14 +425,14 @@ async function loadProducts() {
         );
 
         params.set(
-            "limit",
+            "page_size",
             pageLimit
         );
 
         if (search) {
 
             params.set(
-                "search",
+                "q",
                 search
             );
         }
@@ -369,18 +476,13 @@ function renderProducts(data) {
 
     productsTableBody.innerHTML = "";
 
-    const products =
-        data.products || [];
+    const products = data.items || [];
 
-    const total =
-        Number(data.total || 0);
+    const total = Number(data.total || 0);
 
-    const page =
-        Number(data.page || 1);
+    const page = Number(data.page || 1);
 
-    const limit =
-        Number(data.limit || pageLimit);
-
+    const pageSize = Number(data.page_size || pageLimit);
     if (products.length === 0) {
 
         const row =
@@ -473,7 +575,7 @@ function renderProducts(data) {
         page <= 1;
 
     nextPageButton.disabled =
-        page * limit >= total;
+        page * pageSize >= total;
 }
 
 previousPageButton.addEventListener(
@@ -629,14 +731,8 @@ editForm.addEventListener(
             category:
                 editCategory.value,
 
-            brand:
-                editBrand.value.trim() || null,
-
             tags:
-                tags,
-
-            status:
-                "approved"
+                tags
         };
 
         try {
@@ -662,7 +758,7 @@ editForm.addEventListener(
             if (!response.ok) {
 
                 throw new Error(
-                    result.detail ||
+                    result.error ||
                     "Unable to update product"
                 );
             }

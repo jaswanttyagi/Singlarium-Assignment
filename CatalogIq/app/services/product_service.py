@@ -1,12 +1,30 @@
 import json
+
 from app.database import get_db_connection
+
+
+ALLOWED_CATEGORIES = {
+    "Groceries",
+    "Beverages",
+    "Personal Care",
+    "Household",
+    "Electronics",
+    "Fashion",
+    "Home & Kitchen",
+    "Other",
+}
 
 
 class ProductService:
 
-    def get_products(self, page=1, limit=20, category=None, search=None):
-        # Calculate pagination offset
-        offset = (page - 1) * limit
+    def get_products(
+        self,
+        page=1,
+        page_size=20,
+        category=None,
+        q=None
+    ):
+        offset = (page - 1) * page_size
 
         conn = get_db_connection()
 
@@ -27,32 +45,37 @@ class ProductService:
 
         params = []
 
-        # Filter by category
+        # Category filter
         if category:
             query += " AND category = ?"
             params.append(category)
 
-        if search:
+        # Case-insensitive search
+        if q:
             query += """
                 AND (
-                    clean_title LIKE ?
-                    OR raw_title LIKE ?
+                    LOWER(COALESCE(clean_title, '')) LIKE LOWER(?)
+                    OR LOWER(raw_title) LIKE LOWER(?)
                 )
             """
 
-            search_value = f"%{search}%"
+            search_value = f"%{q}%"
             params.extend([search_value, search_value])
 
-        # Newest products first
+        # Assignment requires products sorted by SKU
         query += """
-            ORDER BY rowid DESC
+            ORDER BY sku ASC
             LIMIT ? OFFSET ?
         """
 
-        params.extend([limit, offset])
+        params.extend([page_size, offset])
 
-        rows = conn.execute(query, params).fetchall()
+        rows = conn.execute(
+            query,
+            params
+        ).fetchall()
 
+        # Count total matching products
         count_query = """
             SELECT COUNT(*)
             FROM products
@@ -65,15 +88,15 @@ class ProductService:
             count_query += " AND category = ?"
             count_params.append(category)
 
-        if search:
+        if q:
             count_query += """
                 AND (
-                    clean_title LIKE ?
-                    OR raw_title LIKE ?
+                    LOWER(COALESCE(clean_title, '')) LIKE LOWER(?)
+                    OR LOWER(raw_title) LIKE LOWER(?)
                 )
             """
 
-            search_value = f"%{search}%"
+            search_value = f"%{q}%"
             count_params.extend([search_value, search_value])
 
         total = conn.execute(
@@ -88,26 +111,26 @@ class ProductService:
         for row in rows:
             product = dict(row)
 
-            # Convert stored JSON string back into a Python list
             try:
-                product["tags"] = json.loads(product["tags"]) \
-                    if product["tags"] else []
+                product["tags"] = (
+                    json.loads(product["tags"])
+                    if product["tags"]
+                    else []
+                )
             except (json.JSONDecodeError, TypeError):
                 product["tags"] = []
 
             products.append(product)
 
         return {
-            "products": products,
+            "items": products,
             "page": page,
-            "limit": limit,
+            "page_size": page_size,
             "total": total
         }
 
     def get_product(self, sku):
         conn = get_db_connection()
-
-        print("LOOKING FOR SKU:", repr(sku))
 
         row = conn.execute(
             """
@@ -127,8 +150,6 @@ class ProductService:
             (sku,)
         ).fetchone()
 
-        print("FOUND ROW:", row)
-
         conn.close()
 
         if not row:
@@ -137,15 +158,18 @@ class ProductService:
         product = dict(row)
 
         try:
-            product["tags"] = json.loads(product["tags"]) \
-                if product["tags"] else []
+            product["tags"] = (
+                json.loads(product["tags"])
+                if product["tags"]
+                else []
+            )
         except (json.JSONDecodeError, TypeError):
             product["tags"] = []
 
         return product
 
     def update_product(self, sku, data):
-        # Check whether the product exists
+
         conn = get_db_connection()
 
         existing = conn.execute(
@@ -157,31 +181,81 @@ class ProductService:
             conn.close()
             return None
 
-        # Allowed fields that can be manually edited
-        allowed_fields = [
+        # Only these fields can be edited from the API
+        allowed_fields = {
             "clean_title",
             "category",
-            "brand",
-            "tags",
-            "status"
-        ]
+            "tags"
+        }
 
         updates = []
         values = []
 
-        for field in allowed_fields:
-            if field in data:
-                updates.append(f"{field} = ?")
+        # Validate fields
+        for field in data:
 
-                if field == "tags":
-                    values.append(json.dumps(data[field]))
-                else:
-                    values.append(data[field])
+            if field not in allowed_fields:
+                continue
 
-        # Nothing to update
+            value = data[field]
+
+            if field == "clean_title":
+
+                if not isinstance(value, str) or not value.strip():
+                    conn.close()
+                    raise ValueError(
+                        "clean_title cannot be empty"
+                    )
+
+                value = value.strip()
+
+            elif field == "category":
+
+                if value not in ALLOWED_CATEGORIES:
+                    conn.close()
+                    raise ValueError(
+                        f"Invalid category: {value}"
+                    )
+
+            elif field == "tags":
+
+                if not isinstance(value, list):
+                    conn.close()
+                    raise ValueError(
+                        "tags must be a list"
+                    )
+
+                if len(value) > 5:
+                    conn.close()
+                    raise ValueError(
+                        "Maximum 5 tags are allowed"
+                    )
+
+                for tag in value:
+                    if not isinstance(tag, str):
+                        conn.close()
+                        raise ValueError(
+                            "Every tag must be a string"
+                        )
+
+                    if tag != tag.lower():
+                        conn.close()
+                        raise ValueError(
+                            "Tags must be lowercase"
+                        )
+
+                value = json.dumps(value)
+
+            updates.append(f"{field} = ?")
+            values.append(value)
+
         if not updates:
             conn.close()
             return self.get_product(sku)
+
+        # Manual review/edit means product is approved
+        updates.append("status = ?")
+        values.append("approved")
 
         values.append(sku)
 
