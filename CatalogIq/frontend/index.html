@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CatalogIQ</title>
+
+    <link rel="stylesheet" href="/frontend/style.css">
+</head>
+
+<body>
+
+    <!-- Main application container -->
+    <div class="app-container">
+
+        <!-- Header -->
+        <header class="header">
+
+            <div>
+                <h1>CatalogIQ</h1>
+
+                <p>
+                    AI-powered product catalogue enrichment
+                </p>
+            </div>
+
+            <div id="health-status" class="health-status">
+                Checking API...
+            </div>
+
+        </header>
+
+
+        <!-- Upload Section -->
+        <section class="card upload-card">
+
+            <div class="section-header">
+
+                <div>
+                    <h2>Upload Products</h2>
+
+                    <p>
+                        Upload a CSV file to start catalogue enrichment.
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="upload-area">
+
+                <input
+                    type="file"
+                    id="csv-file"
+                    accept=".csv"
+                >
+
+                <button
+                    id="upload-button"
+                    type="button"
+                >
+                    Upload CSV
+                </button>
+
+            </div>
+
+            <p id="upload-message" class="message"></p>
+
+        </section>
+
+
+        <section
+            id="job-section"
+            class="card"
+            hidden
+        >
+
+            <div class="section-header">
+
+                <div>
+                    <h2>Job Progress</h2>
+
+                    <p id="job-id">
+                        Job ID: -
+                    </p>
+                </div>
+
+                <span
+                    id="job-status"
+                    class="status-badge"
+                >
+                    -
+                </span>
+
+            </div>
+
+
+            <!-- Progress bar -->
+            <div class="progress-container">
+
+                <div
+                    id="progress-bar"
+                    class="progress-bar"
+                ></div>
+
+            </div>
+
+            <div class="progress-info">
+
+                <span>
+                    Progress:
+                    <strong id="progress-text">
+                        0 / 0
+                    </strong>
+                </span>
+
+                <span>
+                    Failed:
+                    <strong id="failed-count">
+                        0
+                    </strong>
+                </span>
+
+                <span>
+                    Cache hits:
+                    <strong id="cache-hit-count">
+                        0
+                    </strong>
+                </span>
+
+            </div>
+
+        </section>
+
+
+        <!-- card -->
+        <section class="card">
+
+            <div class="section-header">
+
+                <div>
+                    <h2>Products</h2>
+
+                    <p>
+                        Review and manage enriched catalogue products.
+                    </p>
+                </div>
+
+            </div>
+
+
+            <div class="filters">
+
+                <input
+                    type="text"
+                    id="search-input"
+                    placeholder="Search products..."
+                >
+
+
+                <select id="category-filter">
+
+                    <option value="">
+                        All Categories
+                    </option>
+
+                    <option value="Groceries">
+                        Groceries
+                    </option>
+
+                    <option value="Beverages">
+                        Beverages
+                    </option>
+
+                    <option value="Personal Care">
+                        Personal Care
+                    </option>
+
+                    <option value="Household">
+                        Household
+                    </option>
+
+                    <option value="Electronics">
+                        Electronics
+                    </option>
+
+                    <option value="Fashion">
+                        Fashion
+                    </option>
+
+                    <option value="Home & Kitchen">
+                        Home & Kitchen
+                    </option>
+
+                    <option value="Other">
+                        Other
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="table-container">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+
+                            <th>SKU</th>
+
+                            <th>Raw Title</th>
+
+                            <th>Clean Title</th>
+
+                            <th>Category</th>
+
+                            <th>Brand</th>
+
+                            <th>Tags</th>
+
+                            <th>Status</th>
+
+                            <th>Action</th>
+
+                        </tr>
+
+                    </thead>
+
+                    <tbody id="products-table-body">
+
+                        <tr>
+
+                            <td
+                                colspan="8"
+                                class="empty-state"
+                            >
+                                No products found.
+                            </td>
+
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+
+            <div class="pagination">
+
+                <button
+                    id="previous-page"
+                    type="button"
+                >
+                    Previous
+                </button>
+
+                <span id="page-info">
+                    Page 1
+                </span>
+
+                <button
+                    id="next-page"
+                    type="button"
+                >
+                    Next
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- Product Edit Modal -->
+        <div
+            id="edit-modal"
+            class="modal"
+            hidden
+        >
+
+            <div class="modal-content">
+
+                <div class="modal-header">
+
+                    <h2>Edit Product</h2>
+
+                    <button
+                        id="close-modal"
+                        type="button"
+                        class="close-button"
+                    >
+                        ×
+                    </button>
+
+                </div>
+
+
+                <form id="edit-form">
+
+                    <input
+                        type="hidden"
+                        id="edit-sku"
+                    >
+
+
+                    <label for="edit-clean-title">
+                        Clean Title
+                    </label>
+
+                    <input
+                        type="text"
+                        id="edit-clean-title"
+                        required
+                    >
+
+
+                    <label for="edit-category">
+                        Category
+                    </label>
+
+                    <select id="edit-category" required>
+
+                        <option value="Groceries">
+                            Groceries
+                        </option>
+
+                        <option value="Beverages">
+                            Beverages
+                        </option>
+
+                        <option value="Personal Care">
+                            Personal Care
+                        </option>
+
+                        <option value="Household">
+                            Household
+                        </option>
+
+                        <option value="Electronics">
+                            Electronics
+                        </option>
+
+                        <option value="Fashion">
+                            Fashion
+                        </option>
+
+                        <option value="Home & Kitchen">
+                            Home & Kitchen
+                        </option>
+
+                        <option value="Other">
+                            Other
+                        </option>
+
+                    </select>
+
+
+                    <label for="edit-brand">
+                        Brand
+                    </label>
+
+                    <input
+                        type="text"
+                        id="edit-brand"
+                    >
+
+
+                    <label for="edit-tags">
+                        Tags
+                    </label>
+
+                    <input
+                        type="text"
+                        id="edit-tags"
+                        placeholder="milk, dairy, fresh"
+                    >
+
+
+                    <div class="modal-actions">
+
+                        <button
+                            type="button"
+                            id="cancel-edit"
+                        >
+                            Cancel
+                        </button>
+
+                        <button
+                            type="submit"
+                            id="save-product"
+                        >
+                            Save Changes
+                        </button>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script src="/frontend/app.js"></script>
+
+</body>
+
+</html>
